@@ -1,0 +1,27 @@
+# Environment variables
+.env
+.env.local
+
+# Sensitive config files
+config.local.php
+
+# Temporary files
+*.txt
+!nashr_turi.txt.example
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Backup files
+*.bak
+*~
