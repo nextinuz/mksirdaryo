@@ -40,26 +40,37 @@
 
           <div class="align-items-center">
             <!-- aloqa uchun modul -->
-            <form action="" id="form1" method="post" class="align-items-center">
-            <a type="button" class="align-self-center text-decoration-none top_btn " data-bs-toggle="modal" data-bs-target="#staticBackdrop">Aloqa uchun</a>
-            <div class="modal fade" id="staticBackdrop"  data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel"   aria-hidden="true">
+            <a type="button" class="align-self-center text-decoration-none top_btn" data-bs-toggle="modal" data-bs-target="#staticBackdrop">Aloqa uchun</a>
+            <div class="modal fade" id="staticBackdrop" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
               <div class="modal-dialog">
                 <div class="modal-content">
                   <div class="modal-header">
-                    <h1 class=" fs-5 modal_title text-center mx-auto" id="staticBackdropLabel">Biz bilan aloqa</h1>
+                    <h1 class="fs-5 modal_title text-center mx-auto" id="staticBackdropLabel">Biz bilan aloqa</h1>
                     <button type="button" class="btn-close close_btn" data-bs-dismiss="modal" aria-label="Close" style="margin-left:0;"></button>
                   </div>
-                  <div class="modal-body d-flex align-items-center">
-                    <label for="phone" ata-error="wrong" data-success="right" class="modal_label">Telefon kiriting:</label>
-                    <input name="number" value="" class="form-control modal-inputt" type="number" id="phone" placeholder="+998">
+                  <div class="modal-body">
+                    <div id="contactForm">
+                      <div class="mb-3">
+                        <label for="phone" class="form-label">Telefon kiriting:</label>
+                        <input name="number" value="+998(__)___-__-__" class="form-control modal-inputt" type="text" id="phone" placeholder="+998(__)___-__-__" required>
+                      </div>
+                      <div id="contactMessage" class="mt-3"></div>
+                    </div>
+                    <div id="contactSuccess" style="display: none;">
+                      <div class="alert alert-success text-center">
+                        <i class="fas fa-check-circle" style="font-size: 48px; color: #28a745;"></i>
+                        <h5 class="mt-3">Ma'lumot yuborildi!</h5>
+                        <p class="mb-0">Tez orada siz bilan bog'lanamiz.</p>
+                      </div>
+                    </div>
                   </div>
                   <div class="modal-footer">
-                    <button type="submit" id="btnSave" name="call_modal" value="yuborish" class="btn modal_btn text-decoration-none" data-bs-dismiss="modal">Yuborish</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="closeModalBtn">Yopish</button>
+                    <button type="button" id="btnSave" class="btn modal_btn text-decoration-none">Yuborish</button>
                   </div>
                 </div>
               </div>
             </div>
-            </form>
           <!-- Aloqa uchun modul end -->
           </div>
 
@@ -227,11 +238,11 @@
  
  
  
-<?php
+ <?php
 // Foydalanuvchilar sonini ma'lumotlar bazasida saqlash
 if (!isset($_SESSION['visited'])) {
     $_SESSION['visited'] = true;
-    
+
     // Jadvallarni yaratish (agar mavjud bo'lmasa)
     $create_table = "CREATE TABLE IF NOT EXISTS site_stats (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -248,7 +259,7 @@ if (!isset($_SESSION['visited'])) {
     
     // Sonni oshirish (atomic operation)
     $db->query("UPDATE site_stats SET visit_count = visit_count + 1 WHERE id = 1");
-}
+    }
 
 // Joriy sonni olish
 $result = $db->query("SELECT visit_count FROM site_stats WHERE id = 1 LIMIT 1");
@@ -265,23 +276,69 @@ echo "<div style='padding-left: 50px; padding-bottom: 20px; font-size: 18px; '>S
     <script src="./js/main.js"></script>
     <script src="./js/js.js"></script>
     <script src="./js/click.js"></script>
+    <script>
+    // Aloqa modali uchun AJAX
+    $(document).ready(function() {
+        $('#btnSave').on('click', function(e) {
+            e.preventDefault();
+            
+            var phone = $('#phone').val();
+            
+            // Telefon raqamini tekshirish
+            if (!phone || phone.indexOf('_') !== -1) {
+                $('#contactMessage').html('<div class="alert alert-danger">Iltimos, to\'liq telefon raqamini kiriting!</div>');
+                return;
+            }
+            
+            // Yuborish tugmasini o'chirish
+            $(this).prop('disabled', true).text('Yuborilmoqda...');
+            
+            // AJAX orqali yuborish
+            $.ajax({
+                url: 'contact_handler.php',
+                type: 'POST',
+                data: {
+                    call_modal: 'yuborish',
+                    number: phone
+                },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success) {
+                        // Formani yashirish, muvaffaqiyat xabarini ko'rsatish
+                        $('#contactForm').hide();
+                        $('#contactSuccess').show();
+                        $('#btnSave').hide();
+                        $('#closeModalBtn').text('Yopish').removeClass('btn-secondary').addClass('btn-primary');
+                        
+                        // 3 soniyadan keyin modalni yopish
+                        setTimeout(function() {
+                            $('#staticBackdrop').modal('hide');
+                        }, 3000);
+                    } else {
+                        $('#contactMessage').html('<div class="alert alert-danger">' + response.message + '</div>');
+                        $('#btnSave').prop('disabled', false).text('Yuborish');
+                    }
+                },
+                error: function() {
+                    $('#contactMessage').html('<div class="alert alert-danger">Xatolik yuz berdi. Iltimos, qayta urinib ko\'ring.</div>');
+                    $('#btnSave').prop('disabled', false).text('Yuborish');
+                }
+            });
+        });
+        
+        // Modal yopilganda formani tozalash
+        $('#staticBackdrop').on('hidden.bs.modal', function() {
+            $('#contactForm').show();
+            $('#contactSuccess').hide();
+            $('#phone').val('+998(__)___-__-__');
+            $('#btnSave').prop('disabled', false).text('Yuborish').show();
+            $('#closeModalBtn').text('Yopish').removeClass('btn-primary').addClass('btn-secondary');
+            $('#contactMessage').html('');
+        });
+    });
+    </script>
 </body>
 </html>
-
-
-
-<?php
-$token_placeholder_removed = null; // eski tokenlar olib tashlandi
-
-// Aloqa modalidan kelgan so'rovni yuborish (agar token mavjud bo'lsa)
-if (isset($_POST['call_modal']) && !empty($_POST['number'])) {
-    $number_tel = sanitize_str($_POST['number']);
-    if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
-        $text = $number_tel . " raqamiga obuna masalasida qo'ng'iroq qiling";
-        $url = "https://api.telegram.org/bot" . TELEGRAM_BOT_TOKEN . "/sendMessage?chat_id=" . TELEGRAM_CHAT_ID . "&parse_mode=html&text=" . urlencode($text);
-        @fopen($url, "r");
-    }
-}
 
 
 

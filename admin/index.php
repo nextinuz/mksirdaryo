@@ -1,394 +1,396 @@
 <?
 require_once '../config.php';
 
-$sbm = $_POST['sbm'] ?? null;
-$login = $_POST['username'] ?? '';
-$password = $_POST['password'] ?? '';
-$error = '';
+// Xavfsizlik funksiyalari
+function generateCSRFToken() {
+    if (!isset($_SESSION[CSRF_TOKEN_NAME])) {
+        $_SESSION[CSRF_TOKEN_NAME] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION[CSRF_TOKEN_NAME];
+}
 
-if(isset($sbm)){
-	if($login === ADMIN_USER && password_verify($password, ADMIN_PASS_HASH)){
-        header('Location: gazeta/');
-        exit;
+function verifyCSRFToken($token) {
+    return isset($_SESSION[CSRF_TOKEN_NAME]) && hash_equals($_SESSION[CSRF_TOKEN_NAME], $token);
+}
+
+function getClientIP() {
+    $ipkeys = ['HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR'];
+    foreach ($ipkeys as $key) {
+        if (array_key_exists($key, $_SERVER) === true) {
+            foreach (explode(',', $_SERVER[$key]) as $ip) {
+                $ip = trim($ip);
+                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false) {
+                    return $ip;
+                }
+            }
+        }
+    }
+    return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+}
+
+function checkLoginAttempts($db, $ip) {
+    // Login attempts jadvalini yaratish
+    $db->query("CREATE TABLE IF NOT EXISTS login_attempts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        ip_address VARCHAR(45) NOT NULL,
+        attempts INT DEFAULT 1,
+        last_attempt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        locked_until TIMESTAMP NULL,
+        INDEX idx_ip (ip_address),
+        INDEX idx_locked (locked_until)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    
+    $ip_escaped = $db->real_escape_string($ip);
+    $result = $db->query("SELECT attempts, locked_until FROM login_attempts WHERE ip_address = '$ip_escaped' LIMIT 1");
+    
+    if ($result && $row = $result->fetch_assoc()) {
+        // Agar bloklangan bo'lsa
+        if ($row['locked_until'] && strtotime($row['locked_until']) > time()) {
+            $remaining = strtotime($row['locked_until']) - time();
+            return ['locked' => true, 'remaining' => $remaining];
+        }
+        // Agar bloklanish vaqti o'tgan bo'lsa, qayta tiklash
+        if ($row['locked_until'] && strtotime($row['locked_until']) <= time()) {
+            $db->query("UPDATE login_attempts SET attempts = 0, locked_until = NULL WHERE ip_address = '$ip_escaped'");
+        }
+        return ['locked' => false, 'attempts' => (int)$row['attempts']];
+    }
+    
+    return ['locked' => false, 'attempts' => 0];
+}
+
+function recordFailedAttempt($db, $ip) {
+    $ip_escaped = $db->real_escape_string($ip);
+    $result = $db->query("SELECT attempts FROM login_attempts WHERE ip_address = '$ip_escaped' LIMIT 1");
+    
+    if ($result && $row = $result->fetch_assoc()) {
+        $new_attempts = (int)$row['attempts'] + 1;
+        $lock_until = null;
+        
+        if ($new_attempts >= MAX_LOGIN_ATTEMPTS) {
+            $lock_until = date('Y-m-d H:i:s', time() + LOGIN_LOCKOUT_TIME);
+        }
+        
+        if ($lock_until) {
+            $db->query("UPDATE login_attempts SET attempts = $new_attempts, locked_until = '$lock_until' WHERE ip_address = '$ip_escaped'");
+        } else {
+            $db->query("UPDATE login_attempts SET attempts = $new_attempts WHERE ip_address = '$ip_escaped'");
+        }
     } else {
-        $error = 'Login yoki parol noto‘g‘ri';
+        $db->query("INSERT INTO login_attempts (ip_address, attempts) VALUES ('$ip_escaped', 1)");
     }
 }
+
+function clearLoginAttempts($db, $ip) {
+    $ip_escaped = $db->real_escape_string($ip);
+    $db->query("DELETE FROM login_attempts WHERE ip_address = '$ip_escaped'");
+}
+
+// Agar allaqachon kirgan bo'lsa, admin panelga yo'naltirish
+if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
+    if (isset($_SESSION['admin_last_activity']) && (time() - $_SESSION['admin_last_activity'] > SESSION_TIMEOUT)) {
+        // Session muddati o'tgan
+        session_destroy();
+        header('Location: index.php');
+        exit;
+    }
+    $_SESSION['admin_last_activity'] = time();
+    header('Location: gazeta/');
+    exit;
+}
+
+// Logout (GET parametri orqali)
+if (isset($_GET['logout'])) {
+    // Logout faylga yo'naltirish
+    header('Location: logout.php');
+    exit;
+}
+
+$sbm = $_POST['sbm'] ?? null;
+$login = trim($_POST['username'] ?? '');
+$password = $_POST['password'] ?? '';
+$csrf_token = $_POST['csrf_token'] ?? '';
+$error = '';
+$success_msg = '';
+
+if (isset($_GET['logged_out'])) {
+    $success_msg = 'Siz muvaffaqiyatli chiqdingiz!';
+}
+
+if (isset($sbm)) {
+    // CSRF token tekshirish
+    if (!verifyCSRFToken($csrf_token)) {
+        $error = 'Xavfsizlik xatosi. Sahifani yangilab qayta urinib ko\'ring.';
+    } else {
+        $ip = getClientIP();
+        
+        // Login attempts tekshirish
+        $attempt_check = checkLoginAttempts($db, $ip);
+        
+        if ($attempt_check['locked']) {
+            $minutes = ceil($attempt_check['remaining'] / 60);
+            $error = "Juda ko'p noto'g'ri urinishlar. Iltimos, $minutes daqiqadan keyin qayta urinib ko'ring.";
+        } else {
+            // Input sanitization (login uchun faqat trim, parol uchun hech narsa)
+            $login = trim($login);
+            
+            // Login va parol tekshirish
+            if (empty($login) || empty($password)) {
+                $error = 'Login va parolni kiriting!';
+                recordFailedAttempt($db, $ip);
+            } else {
+                // Login va parolni MD5 hash qilish
+                $login_md5 = md5($login);
+                $password_md5 = md5($password);
+                
+                // Ma'lumotlar bazasidan foydalanuvchini MD5 hash orqali topish
+                $stmt = $db->prepare("SELECT id, username FROM admin_users WHERE username_md5 = ? AND password_md5 = ? AND is_active = 1 LIMIT 1");
+                $stmt->bind_param('ss', $login_md5, $password_md5);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                
+                if ($result && $user = $result->fetch_assoc()) {
+                    // Muvaffaqiyatli kirish
+                    clearLoginAttempts($db, $ip);
+                    
+                    // Last login yangilash
+                    $update_stmt = $db->prepare("UPDATE admin_users SET last_login = NOW() WHERE id = ?");
+                    $update_stmt->bind_param('i', $user['id']);
+                    $update_stmt->execute();
+                    $update_stmt->close();
+                    
+                    // Xavfsiz session yaratish
+                    session_regenerate_id(true);
+                    $_SESSION['admin_logged_in'] = true;
+                    $_SESSION['admin_user'] = $user['username'];
+                    $_SESSION['admin_user_id'] = $user['id'];
+                    $_SESSION['admin_ip'] = $ip;
+                    $_SESSION['admin_last_activity'] = time();
+                    $_SESSION['admin_login_time'] = time();
+                    
+                    // CSRF token yangilash
+                    generateCSRFToken();
+                    
+                    $stmt->close();
+                    header('Location: gazeta/index.php');
+                    exit;
+                } else {
+                    // Login yoki parol noto'g'ri
+                    $error = 'Login yoki parol noto\'g\'ri!';
+                    recordFailedAttempt($db, $ip);
+                    
+                    // Qolgan urinishlar sonini ko'rsatish
+                    $remaining = MAX_LOGIN_ATTEMPTS - ($attempt_check['attempts'] + 1);
+                    if ($remaining > 0) {
+                        $error .= " Qolgan urinishlar: $remaining";
+                    }
+                }
+                
+                if (isset($stmt)) {
+                    $stmt->close();
+                }
+            }
+        }
+    }
+}
+
+$csrf_token = generateCSRFToken();
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="uz">
 <head>
 	<meta charset="UTF-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="robots" content="noindex, nofollow">
 	<title>Admin panelga kirish</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+		
+		body {
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			min-height: 100vh;
+			padding: 20px;
+		}
+		
+		#wrapper {
+			width: 100%;
+			max-width: 400px;
+		}
+		
+		.login-form {
+			background: #fff;
+			border-radius: 15px;
+			box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+			overflow: hidden;
+		}
+		
+		.login-form .header {
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			color: white;
+			padding: 40px 30px;
+			text-align: center;
+		}
+		
+		.login-form .header h1 {
+			font-size: 28px;
+			margin-bottom: 10px;
+			font-weight: 300;
+		}
+		
+		.login-form .header span {
+			font-size: 14px;
+			opacity: 0.9;
+		}
+		
+		.login-form .content {
+			padding: 30px;
+		}
+		
+		.alert {
+			padding: 12px 15px;
+			border-radius: 8px;
+			margin-bottom: 20px;
+			font-size: 14px;
+		}
+		
+		.alert-error {
+			background: #fee;
+			color: #c33;
+			border: 1px solid #fcc;
+		}
+		
+		.alert-success {
+			background: #efe;
+			color: #3c3;
+			border: 1px solid #cfc;
+		}
+		
+		.form-group {
+			margin-bottom: 20px;
+		}
+		
+		.form-group label {
+			display: block;
+			margin-bottom: 8px;
+			color: #333;
+			font-weight: 500;
+			font-size: 14px;
+		}
+		
+		.form-group input {
+			width: 100%;
+			padding: 12px 15px;
+			border: 2px solid #e0e0e0;
+			border-radius: 8px;
+			font-size: 15px;
+			transition: all 0.3s;
+		}
+		
+		.form-group input:focus {
+			outline: none;
+			border-color: #667eea;
+			box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+		}
+		
+		.login-form .footer {
+			padding: 0 30px 30px;
+		}
+		
+		.button {
+			width: 100%;
+			padding: 14px;
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			color: white;
+			border: none;
+			border-radius: 8px;
+			font-size: 16px;
+			font-weight: 600;
+			cursor: pointer;
+			transition: transform 0.2s, box-shadow 0.2s;
+		}
+		
+		.button:hover {
+			transform: translateY(-2px);
+			box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+		}
+		
+		.button:active {
+			transform: translateY(0);
+		}
+		
+		.security-info {
+			margin-top: 20px;
+			padding: 15px;
+			background: #f8f9fa;
+			border-radius: 8px;
+			font-size: 12px;
+			color: #666;
+			text-align: center;
+		}
+	</style>
 </head>
 <body>
 <div id="wrapper">
-    <div class="user-icon"></div>
-    <div class="pass-icon"></div>
-	
-<form name="login-form" class="login-form" action="" method="post">
-
-    <div class="header">
-		<h1>Admin panelga kirish</h1>
-		<span>Admin panelga kirish uchun <br> login va parolni tering</span>
-        <? if($error): ?>
-            <div style="color:red; margin-top:10px;"><?= htmlspecialchars($error) ?></div>
-        <? endif; ?>
-    </div>
-
-    <div class="content">
-		<input name="username" type="text" class="input username" placeholder="Login" onfocus="this.value=''" />
-		<input name="password" type="password" class="input password" placeholder="******" onfocus="this.value=''" />
-    </div>
-
-    <div class="footer" style="display: flex;justify-content: center;align-items: center;box-shadow: 0px 0px 10px #fff">
-		<input type="submit" style="letter-spacing: 1px" name="sbm" value="Kirish" class="button" />
-    </div>
-</form>
+	<form name="login-form" class="login-form" action="" method="post">
+		<div class="header">
+			<h1>🔐 Admin Panel</h1>
+			<span>Xavfsiz kirish tizimi</span>
+		</div>
+		
+		<div class="content">
+			<?php if ($error): ?>
+				<div class="alert alert-error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
+			<?php endif; ?>
+			
+			<?php if ($success_msg): ?>
+				<div class="alert alert-success"><?= htmlspecialchars($success_msg, ENT_QUOTES, 'UTF-8') ?></div>
+			<?php endif; ?>
+			
+			<input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token, ENT_QUOTES, 'UTF-8') ?>">
+			
+			<div class="form-group">
+				<label for="username">Login</label>
+				<input 
+					type="text" 
+					id="username" 
+					name="username" 
+					placeholder="Login kiriting" 
+					required 
+					autocomplete="username"
+					value="<?= htmlspecialchars($login, ENT_QUOTES, 'UTF-8') ?>"
+				>
+			</div>
+			
+			<div class="form-group">
+				<label for="password">Parol</label>
+				<input 
+					type="password" 
+					id="password" 
+					name="password" 
+					placeholder="Parol kiriting" 
+					required 
+					autocomplete="current-password"
+				>
+			</div>
+			
+			<div class="footer">
+				<button type="submit" name="sbm" value="1" class="button">Kirish</button>
+			</div>
+			
+			<div class="security-info">
+				🔒 Xavfsizlik: <?= MAX_LOGIN_ATTEMPTS ?> ta noto'g'ri urinishdan keyin bloklanadi
+			</div>
+		</div>
+	</form>
+</div>
 </body>
 </html>
-<style>
-	/*******************
-LOGIN FORM STYLESHEET
-by: Amit Jakhu
-www.amitjakhu.com
-*******************/
-
-/*******************
-FONTS
-*******************/
-
-@import url(http://fonts.googleapis.com/css?family=Bree+Serif);
-
-/*******************
-SELECTION STYLING
-*******************/
-
-::selection {
-	color: #fff;
-	background: #f676b2; /* Safari */
-}
-::-moz-selection {
-	color: #fff;
-	background: #f676b2; /* Firefox */
-}
-
-/*******************
-BODY STYLING
-*******************/
-
-* {
-	margin: 0;
-	padding: 0;
-	border: 0;
-}
-
-body {
-	background: #555;
-	font-family: "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
-	font-weight:300;
-	text-align: left;
-	text-decoration: none;
-}
-
-#wrapper {
-	/* Center wrapper perfectly */
-	width: 300px;
-	height: 400px;
-	position: absolute;
-	left: 50%;
-	top: 50%;
-	margin-left: -150px;
-	margin-top: -200px;
-	box-shadow: 0px 0px 10px #fff;
-	border-radius: 10px;
-}
-
-/*
-.gradient {
-	width: 600px;
-	height: 600px;
-	position: fixed;
-	left: 50%;
-	top: 50%;
-	margin-left: -300px;
-	margin-top: -300px;
-	
-	background: url(../images/gradient.png) no-repeat;
-}
-*/
-
-.gradient {
-	/* Center Positioning */
-	width: 600px;
-	height: 600px;
-	position: fixed;
-	left: 50%;
-	top: 50%;
-	margin-left: -300px;
-	margin-top: -300px;
-	
-	/* Fallback */ 
-	/* background-image: url(../images/gradient.png); 
-	background-repeat: no-repeat;  */
-	
-	/* CSS3 Gradient */
-	/* background-image: -webkit-gradient(radial, 0% 0%, 0% 100%, from(rgba(213,246,255,1)), to(rgba(213,246,255,0)));
-	background-image: -webkit-radial-gradient(50% 50%, 40% 40%, rgba(213,246,255,1), rgba(213,246,255,0));
-	background-image: -moz-radial-gradient(50% 50%, 50% 50%, rgba(213,246,255,1), rgba(213,246,255,0));
-	background-image: -ms-radial-gradient(50% 50%, 50% 50%, rgba(213,246,255,1), rgba(213,246,255,0));
-	background-image: -o-radial-gradient(50% 50%, 50% 50%, rgba(213,246,255,1), rgba(213,246,255,0)); */
-}
-
-/*******************
-LOGIN FORM
-*******************/
-
-.login-form {
-	width: 300px;
-	margin: 0 auto;
-	position: relative;
-	z-index:5;
-	
-	background: #f3f3f3;
-	border: 1px solid #fff;
-	border-radius: 5px;
-	
-	/* box-shadow: 0 1px 3px rgba(0,0,0,0.5);
-	-moz-box-shadow: 0 1px 3px rgba(0,0,0,0.5);
-	-webkit-box-shadow: 0 1px 3px rgba(0,0,0,0.5); */
-}
-
-/*******************
-HEADER
-*******************/
-
-.login-form .header {
-	padding: 40px 30px 30px 30px;
-}
-
-.login-form .header h1 {
-	font-family: 'Bree Serif', serif;
-	font-weight: 300;
-	font-size: 28px;
-	line-height:34px;
-	color: #414848;
-	text-shadow: 1px 1px 0 rgba(256,256,256,1.0);
-	margin-bottom: 10px;
-}
-
-.login-form .header span {
-	font-size: 11px;
-	line-height: 16px;
-	color: #678889;
-	text-shadow: 1px 1px 0 rgba(256,256,256,1.0);
-}
-
-/*******************
-CONTENT
-*******************/
-
-.login-form .content {
-	padding: 0 30px 25px 30px;
-}
-
-/* Input field */
-.login-form .content .input {
-	width: 188px;
-	padding: 15px 25px;
-	
-	font-family: "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
-	font-weight: 400;
-	font-size: 14px;
-	color: #9d9e9e;
-	text-shadow: 1px 1px 0 rgba(256,256,256,1.0);
-	
-	background: #fff;
-	border: 1px solid #fff;
-	border-radius: 5px;
-	
-	/* box-shadow: inset 0 1px 3px rgba(0,0,0,0.50);
-	-moz-box-shadow: inset 0 1px 3px rgba(0,0,0,0.50);
-	-webkit-box-shadow: inset 0 1px 3px rgba(0,0,0,0.50); */
-}
-
-/* Second input field */
-.login-form .content .password, .login-form .content .pass-icon {
-	margin-top: 25px;
-}
-
-.login-form .content .input:hover {
-	background: #dfe9ec;
-	color: #414848;
-}
-
-.login-form .content .input:focus {
-	background: #dfe9ec;
-	color: #414848;
-	
-	/* box-shadow: inset 0 1px 2px rgba(0,0,0,0.25);
-	-moz-box-shadow: inset 0 1px 2px rgba(0,0,0,0.25);
-	-webkit-box-shadow: inset 0 1px 2px rgba(0,0,0,0.25); */
-}
-
-.user-icon, .pass-icon {
-	width: 46px;
-	height: 47px;
-	display: block;
-	position: absolute;
-	left: 0px;
-	padding-right: 2px;
-	z-index: 3;
-	
-	-moz-border-radius-topleft: 5px;
-	-moz-border-radius-bottomleft: 5px;
-	-webkit-border-top-left-radius: 5px;
-	-webkit-border-bottom-left-radius: 5px;
-}
-
-.user-icon {
-	top:166px; /* Positioning fix for slide-in, got lazy to think up of simpler method. */
-	background: rgba(65,72,72,0.75) url(../images/user-icon.png) no-repeat center;	
-}
-
-.pass-icon {
-	top:240px;
-	background: rgba(65,72,72,0.75) url(../images/pass-icon.png) no-repeat center;
-}
-
-/* Animation */
-.input, .user-icon, .pass-icon, .button, .register {
-	transition: all 0.5s;
-	-moz-transition: all 0.5s;
-	-webkit-transition: all 0.5s;
-	-o-transition: all 0.5s;
-	-ms-transition: all 0.5s;
-	outline:none;
-}
-
-/*******************
-FOOTER
-*******************/
-
-.login-form .footer {
-	padding: 25px 30px 40px 30px;
-	overflow: auto;
-	
-	background: #d4dedf;
-	border-top: 1px solid #fff;
-	
-	box-shadow: inset 0 1px 0 rgba(0,0,0,0.15);
-	-moz-box-shadow: inset 0 1px 0 rgba(0,0,0,0.15);
-	-webkit-box-shadow: inset 0 1px 0 rgba(0,0,0,0.15);
-}
-
-/* Login button */
-.login-form .footer .button {
-	float:right;
-	padding: 11px 25px;
-	
-	font-family: 'Bree Serif', serif;
-	font-weight: 300;
-	font-size: 18px;
-	color: #fff;
-	text-shadow: 0px 1px 0 rgba(0,0,0,0.25);
-	
-	background: #56c2e1;
-	border: 1px solid #46b3d3;
-	border-radius: 5px;
-	cursor: pointer;
-	
-	box-shadow: inset 0 0 2px rgba(256,256,256,0.75);
-	-moz-box-shadow: inset 0 0 2px rgba(256,256,256,0.75);
-	-webkit-box-shadow: inset 0 0 2px rgba(256,256,256,0.75);
-}
-
-.login-form .footer .button:hover {
-	background: #3f9db8;
-	border: 1px solid rgba(256,256,256,0.75);
-	
-	box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
-	-moz-box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
-	-webkit-box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
-}
-
-.login-form .footer .button:focus {
-	position: relative;
-	bottom: -1px;
-	
-	background: #56c2e1;
-	
-	box-shadow: inset 0 1px 6px rgba(256,256,256,0.75);
-	-moz-box-shadow: inset 0 1px 6px rgba(256,256,256,0.75);
-	-webkit-box-shadow: inset 0 1px 6px rgba(256,256,256,0.75);
-}
-
-/* Register button */
-.login-form .footer .register {
-	display: block;
-	float: right;
-	padding: 10px 5px 10px 0;
-	margin-right: 20px;
-	
-	background: none;
-	border: none;
-	cursor: pointer;
-	
-	font-family: 'Bree Serif', serif;
-	font-weight: 300;
-	font-size: 18px;
-	color: #414848;
-	text-shadow: 0px 1px 0 rgba(256,256,256,0.5);
-}
-
-.login-form .footer .register:hover {
-	color: #3f9db8;
-}
-
-.login-form .footer .register:focus {
-	position: relative;
-	bottom: -1px;
-}
-
-/* ����� ���� vladmaxi, ����� ������� */
-.vladmaxi-top{
-	line-height: 24px;
-	font-size: 11px;
-	background: #eee;
-	text-transform: uppercase;
-	z-index: 9999;
-	position: fixed;
-	top:0;
-	left:0;
-	width:100%;
-	font-family: calibri;
-	font-size: 13px;
-	box-shadow: 1px 0px 2px rgba(0,0,0,0.2);
-	-webkit-animation: slideOut 0.5s ease-in-out 0.3s backwards;
-}
-@-webkit-keyframes slideOut{
-	0%{top:-30px; opacity: 0;}
-	100%{top:0px; opacity: 1;}
-}
-
-.vladmaxi-top a{
-	padding: 0px 10px;
-	letter-spacing: 1px;
-	color: #333;
-	text-shadow: 0px 1px 1px #fff;
-	display: block;
-	float: left;
-}
-.vladmaxi-top a:hover{
-	background: #fff;
-}
-.vladmaxi-top span.right{
-	float: right;
-}
-.vladmaxi-top span.right a{
-	float: left;
-	display: block;
-}
-</style>

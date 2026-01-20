@@ -417,13 +417,68 @@ body { margin-left: 0.26in; margin-right: 0.19in; margin-top: 0.21in; margin-bot
     </table>
 
 
-      <div style="margin-top: 40px;">
-        <p style="padding: 5px 10px; border: 1px solid black; width: 150px; border-radius: 10px; background-color: blue; text-align: center;">
+      <div style="margin-top: 40px; display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+        <p style="padding: 5px 10px; border: 1px solid black; width: 150px; border-radius: 10px; background-color: blue; text-align: center; margin: 0;">
           <a href="https://mk-sirdaryo.uz" style="text-decoration: none; font-size: 16px; color: white;">Orqaga qaytish</a>
+        </p>
+        <p style="padding: 5px 10px; border: 1px solid black; width: 150px; border-radius: 10px; background-color: #28a745; text-align: center; margin: 0; cursor: pointer;" id="downloadPdfBtn">
+          <a href="#" onclick="downloadPDF(); return false;" style="text-decoration: none; font-size: 16px; color: white;">Yuklab olish (PDF)</a>
         </p>
       </div>
 
   </body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script>
+    // PHP dan JavaScript ga ma'lumotlarni o'tkazish
+    const pdfFileName = 'abonement_<?php echo date("Y-m-d"); ?>_<?php echo preg_replace("/[^a-zA-Z0-9_-]/", "_", $fish); ?>.pdf';
+    
+    function downloadPDF() {
+      // Yuklab olish tugmasini yashirish
+      const downloadBtn = document.getElementById('downloadPdfBtn');
+      if (downloadBtn) {
+        downloadBtn.style.display = 'none';
+      }
+      
+      // PDF yaratish uchun element (faqat jadval va kerakli qismlar)
+      const element = document.querySelector('table.sheet0');
+      if (!element) {
+        element = document.body;
+      }
+      
+      // PDF sozlamalari
+      const opt = {
+        margin: [10, 10, 10, 10],
+        filename: pdfFileName,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { 
+          scale: 2,
+          useCORS: true,
+          letterRendering: true,
+          logging: false
+        },
+        jsPDF: { 
+          unit: 'mm', 
+          format: 'a4', 
+          orientation: 'portrait',
+          compress: true
+        }
+      };
+      
+      // PDF yaratish va yuklab olish
+      html2pdf().set(opt).from(element).save().then(function() {
+        // PDF yaratilgandan keyin tugmani qayta ko'rsatish
+        if (downloadBtn) {
+          downloadBtn.style.display = 'block';
+        }
+      }).catch(function(error) {
+        console.error('PDF yaratishda xatolik:', error);
+        alert('PDF yaratishda xatolik yuz berdi. Iltimos, qayta urinib ko\'ring.');
+        if (downloadBtn) {
+          downloadBtn.style.display = 'block';
+        }
+      });
+    }
+  </script>
 </html>
 
 
@@ -431,25 +486,25 @@ body { margin-left: 0.26in; margin-right: 0.19in; margin-top: 0.21in; margin-bot
 <?
 // Telegramga buyurtmani yuborish
 if (isset($btn) && TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
-    $arr = array(
-        'Hudud: ' => $hudud,
-        'MFY: ' => $mfy,
-        'Manzil: ' => $manzil,
-        'F.I.Sh: ' => $fish,
-        'Toifa: ' => $toifa,
-        'Tashkilot nomi: ' => $tashkilot,
-        'Telefon raqami: ' => $number_raqam,
-        'Nashr turi: ' => $nashr_turi,
-        'Nashr nomi: ' => $nashr_nomi,
-        'Obuna davri (Oy):' => $obuna_davri,
-        'Komplekt soni (Шт): ' => $komplektlar_soni,
+$arr = array(
+    'Hudud: ' => $hudud,
+    'MFY: ' => $mfy,
+    'Manzil: ' => $manzil,
+    'F.I.Sh: ' => $fish,
+    'Toifa: ' => $toifa,
+    'Tashkilot nomi: ' => $tashkilot,
+    'Telefon raqami: ' => $number_raqam,
+    'Nashr turi: ' => $nashr_turi,
+    'Nashr nomi: ' => $nashr_nomi,
+    'Obuna davri (Oy):' => $obuna_davri,
+    'Komplekt soni (Шт): ' => $komplektlar_soni,
         'Umumiy narxi (Som) :' => $final_narx
-    );
+);
 
     $txt = '';
-    foreach($arr as $key => $value) {
-      $txt .= "<b>".$key."</b> ".$value."%0A";
-    };
+foreach($arr as $key => $value) {
+  $txt .= "<b>".$key."</b> ".$value."%0A";
+};
 
     $telegramUrl = "https://api.telegram.org/bot".TELEGRAM_BOT_TOKEN."/sendMessage?chat_id=".TELEGRAM_CHAT_ID."&parse_mode=html&text=".$txt;
     @fopen($telegramUrl,"r");
