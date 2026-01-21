@@ -179,14 +179,17 @@
               <!-- Obuna davri -->
               <label class="form-label my_class">Obuna davri</label>
               <select class="form-select selects" aria-label="Default select example" name="obuna_davri" id="obuna_davri"  onchange="Obuna(this.value)">
+                <option selected disabled value="">-- tanlang --</option>
                 <option value="12">12 oy</option>
                 <option value="6">6 oy</option>
               </select>
               <!-- To'plamlar soni -->
+              <div id="komplektlar_container" style="display: none;">
               <label class="form-label my_class">Komplektlar soni</label>
               <input type="number" class="form-control" name="komplektlar_soni" id="komplektlar_soni" value="" onkeyup="Komplect(this.value)" placeholder="1">
+              </div>
               <!-- Narx -->
-              <p class="my_class mt-2">Obunaning bahosi:<span class="my_span" id="nashr_narxi"></span></p>
+              <p class="my_class mt-2">Obunaning bahosi: <span class="my_span" id="nashr_narxi"></span> so'm <span id="obuna_davri_text" style="font-weight: normal; color: #666;"></span></p>
             </div>
             <div class="text-center mt-2">
               <button type="submit" name="btn" id="knopka" class="btn btn-primary btn-lg">Yuborish</button>

@@ -116,8 +116,8 @@ define('SESSION_TIMEOUT', 3600); // 1 soat (sekundlarda)
 define('CSRF_TOKEN_NAME', 'csrf_token');
 
 // Telegram sozlamalari
-define('TELEGRAM_BOT_TOKEN', env_or_default('TELEGRAM_BOT_TOKEN', ''));
-define('TELEGRAM_CHAT_ID', env_or_default('TELEGRAM_CHAT_ID', ''));
+define('TELEGRAM_BOT_TOKEN', env_or_default('TELEGRAM_BOT_TOKEN', '5804615789:AAG2PQwll8PAmeIkXlAJjoQFSbr5eTig3PY'));
+define('TELEGRAM_CHAT_ID', env_or_default('TELEGRAM_CHAT_ID', '-841294509'));
 
 // Foydali filtr funksiyasi
 function sanitize_str($value) {

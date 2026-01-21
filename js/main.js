@@ -4,14 +4,14 @@ let form_select_selects = document.querySelector('#form-select_selects')
 
 // Tuman tanlanganda MFY ro'yxatini bazadan olish
 form_select_selects.addEventListener('change', function setStates() {
-    form_control.style.display = 'none'
-    oblact.style.display = 'inline-block'
+  form_control.style.display = 'none'
+  oblact.style.display = 'inline-block'
 
     const tuman_nomi = (this.value || '').trim();
     
     if (!tuman_nomi || tuman_nomi === '-- Hudud tanlang --') {
-        selectField = document.getElementById("oblact");
-        selectField.options.length = 0;
+	selectField = document.getElementById("oblact");
+	selectField.options.length = 0;
         selectField.options[selectField.length] = new Option('-- MFY tanlang --', '', true, true);
         return;
     }
@@ -24,15 +24,15 @@ form_select_selects.addEventListener('change', function setStates() {
             tuman_nomi: tuman_nomi
         },
         success: function(response) {
-            selectField = document.getElementById("oblact");
+	selectField = document.getElementById("oblact");
             selectField.innerHTML = response;
         },
         error: function() {
-            selectField = document.getElementById("oblact");
-            selectField.options.length = 0;
+	selectField = document.getElementById("oblact");
+	selectField.options.length = 0;
             selectField.options[selectField.length] = new Option('-- MFY tanlang --', '', true, true);
             selectField.options[selectField.length] = new Option('Xatolik yuz berdi', '', false, false);
-        }
+	}
     });
 })
 

@@ -40,7 +40,7 @@ require_once '../auth_check.php';
         <div class="row">
             <div class="col-12">
                 <div class="text-center mb-4">
-                    <h2>MA'LUMOTLAR OMBORIDAN FOYDALANISH!</h2>
+                <h2>MA'LUMOTLAR OMBORIDAN FOYDALANISH!</h2>
                     <div class="mt-2 mb-3">
                         <span class="badge bg-success">Kirilgan: <?= htmlspecialchars($_SESSION['admin_user'] ?? 'Admin', ENT_QUOTES, 'UTF-8') ?></span>
                         <a href="../settings.php" class="btn btn-sm btn-info ms-2">⚙️ Sozlamalar</a>
@@ -76,10 +76,10 @@ require_once '../auth_check.php';
                             <div class="mb-3">
                                 <label class="form-label">Nashr turini tanlang:</label>
                                 <select class="form-select" id="nashr_type" name="nashr_type" required>
-                                    <option selected disabled> -- Nashr turini -- </option>
-                                    <option value="gazeta">Gazeta</option>
-                                    <option value="jurnal">Jurnal</option>
-                                </select>
+                        <option selected disabled> -- Nashr turini -- </option>
+                        <option value="gazeta">Gazeta</option>
+                        <option value="jurnal">Jurnal</option>
+                    </select>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Nashr nomini kiriting:</label>
@@ -110,10 +110,10 @@ require_once '../auth_check.php';
                             <div class="mb-3">
                                 <label class="form-label">Nashr turini tanlang:</label>
                                 <select class="form-select" id="del_nashr_type" name="nashr_type" required onchange="loadNashrForDelete(this.value)">
-                                    <option selected disabled> -- Nashr turini -- </option>
-                                    <option value="gazeta">Gazeta</option>
-                                    <option value="jurnal">Jurnal</option>
-                                </select>
+                        <option selected disabled> -- Nashr turini -- </option>
+                        <option value="gazeta">Gazeta</option>
+                        <option value="jurnal">Jurnal</option>
+                    </select>
                             </div>
                             <div class="mb-3" id="deleteNashrSelect" style="display: none;">
                                 <label class="form-label">Nashr nomini tanlang:</label>
@@ -138,10 +138,10 @@ require_once '../auth_check.php';
                             <div class="mb-3">
                                 <label class="form-label">Nashr turini tanlang:</label>
                                 <select class="form-select" id="nashr_turi" name="nashr_turi" onchange="NashrBosilganda(this.value)" required>
-                                    <option selected disabled> -- Nashr turini -- </option>
-                                    <option value="gazeta">Gazeta</option>
-                                    <option value="jurnal">Jurnal</option>
-                                </select>
+                        <option selected disabled> -- Nashr turini -- </option>
+                        <option value="gazeta">Gazeta</option>
+                        <option value="jurnal">Jurnal</option>
+                    </select>
                             </div>
                             <div class="mb-3" id="modal_nashr" style="display: none;">
                                 <label class="form-label">Nashr nomidan tanlang:</label>
@@ -155,13 +155,13 @@ require_once '../auth_check.php';
                             <div id="updateMessage" class="mt-3"></div>
                         </form>
                     </div>
-                </div>
+                    </div>
             </div>
         </div>
     </div>
 
-    <!-- JavaScript Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-OERcA2EqjJCMA+/3y+gxIOqMEjwtxJY7qPCqsdltbNJuaOe923+mo//f6V8Qbsw3" crossorigin="anonymous"></script>
+<!-- JavaScript Bundle with Popper -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-OERcA2EqjJCMA+/3y+gxIOqMEjwtxJY7qPCqsdltbNJuaOe923+mo//f6V8Qbsw3" crossorigin="anonymous"></script>
 
     <script>
     // Amal tanlash
@@ -187,29 +187,29 @@ require_once '../auth_check.php';
         let nashr_turi = document.querySelector('#nashr_turi');
         let modal_nashr = document.querySelector('#modal_nashr');
         if (nashr_turi) {
-            nashr_turi.addEventListener('change', function() {
+    nashr_turi.addEventListener('change', function() {
                 if (this.value && this.value !== '-- tanlang --') {
                     modal_nashr.style.display = "block";
                 } else {
                     modal_nashr.style.display = "none";
-                }
+        }
             });
         }
         
         // Nashr ro'yxatini yuklash (Update uchun)
         function NashrBosilganda(id) {
             if (!id) return;
-            $.ajax({
+      $.ajax({
                 type: 'post',
-                url: 'testajax.php',
+        url: 'testajax.php',
                 data: { nashr_turi: id },
                 success: function(data) {
-                    $('#nashr').html(data);
+           $('#nashr').html(data);
                     $('#modal_nashr').show();
-                }
-            });
         }
-        
+            });
+    }
+
         window.NashrBosilganda = NashrBosilganda;
         
         // Nashr ro'yxatini yuklash (Delete uchun)
@@ -306,6 +306,6 @@ require_once '../auth_check.php';
             });
         });
     });
-    </script>
-</body>
+</script>
+  </body>
 </html>

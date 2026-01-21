@@ -183,9 +183,9 @@ if (isset($sbm)) {
                     $remaining = MAX_LOGIN_ATTEMPTS - ($attempt_check['attempts'] + 1);
                     if ($remaining > 0) {
                         $error .= " Qolgan urinishlar: $remaining";
-                    }
-                }
-                
+}
+}
+
                 if (isset($stmt)) {
                     $stmt->close();
                 }
@@ -204,14 +204,14 @@ $csrf_token = generateCSRFToken();
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<meta name="robots" content="noindex, nofollow">
 	<title>Admin panelga kirish</title>
-	<style>
-		* {
-			margin: 0;
-			padding: 0;
+<style>
+* {
+	margin: 0;
+	padding: 0;
 			box-sizing: border-box;
-		}
-		
-		body {
+}
+
+body {
 			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 			font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 			display: flex;
@@ -219,55 +219,55 @@ $csrf_token = generateCSRFToken();
 			align-items: center;
 			min-height: 100vh;
 			padding: 20px;
-		}
-		
-		#wrapper {
+}
+
+#wrapper {
 			width: 100%;
 			max-width: 400px;
 		}
-		
-		.login-form {
+
+.login-form {
 			background: #fff;
 			border-radius: 15px;
 			box-shadow: 0 10px 40px rgba(0,0,0,0.2);
 			overflow: hidden;
 		}
-		
-		.login-form .header {
+
+.login-form .header {
 			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 			color: white;
 			padding: 40px 30px;
 			text-align: center;
-		}
-		
-		.login-form .header h1 {
-			font-size: 28px;
-			margin-bottom: 10px;
+}
+
+.login-form .header h1 {
+	font-size: 28px;
+	margin-bottom: 10px;
 			font-weight: 300;
-		}
-		
-		.login-form .header span {
+}
+
+.login-form .header span {
 			font-size: 14px;
 			opacity: 0.9;
-		}
-		
-		.login-form .content {
+}
+
+.login-form .content {
 			padding: 30px;
-		}
-		
+}
+
 		.alert {
 			padding: 12px 15px;
 			border-radius: 8px;
 			margin-bottom: 20px;
-			font-size: 14px;
+	font-size: 14px;
 		}
 		
 		.alert-error {
 			background: #fee;
 			color: #c33;
 			border: 1px solid #fcc;
-		}
-		
+}
+
 		.alert-success {
 			background: #efe;
 			color: #3c3;
@@ -276,10 +276,10 @@ $csrf_token = generateCSRFToken();
 		
 		.form-group {
 			margin-bottom: 20px;
-		}
-		
+}
+
 		.form-group label {
-			display: block;
+	display: block;
 			margin-bottom: 8px;
 			color: #333;
 			font-weight: 500;
@@ -293,15 +293,15 @@ $csrf_token = generateCSRFToken();
 			border-radius: 8px;
 			font-size: 15px;
 			transition: all 0.3s;
-		}
-		
+}
+
 		.form-group input:focus {
 			outline: none;
 			border-color: #667eea;
 			box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-		}
-		
-		.login-form .footer {
+}
+
+.login-form .footer {
 			padding: 0 30px 30px;
 		}
 		
@@ -314,10 +314,10 @@ $csrf_token = generateCSRFToken();
 			border-radius: 8px;
 			font-size: 16px;
 			font-weight: 600;
-			cursor: pointer;
+	cursor: pointer;
 			transition: transform 0.2s, box-shadow 0.2s;
-		}
-		
+}
+
 		.button:hover {
 			transform: translateY(-2px);
 			box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
@@ -325,8 +325,8 @@ $csrf_token = generateCSRFToken();
 		
 		.button:active {
 			transform: translateY(0);
-		}
-		
+}
+
 		.security-info {
 			margin-top: 20px;
 			padding: 15px;
@@ -335,7 +335,7 @@ $csrf_token = generateCSRFToken();
 			font-size: 12px;
 			color: #666;
 			text-align: center;
-		}
+}
 	</style>
 </head>
 <body>

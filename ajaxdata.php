@@ -88,6 +88,8 @@ if (isset($_POST['obuna_davri'])) {
 
     $_SESSION['obuna_davri'] = $obuna_davri;
     $_SESSION['narx'] = $basePrice;
+    $_SESSION['final_narx'] = $price; // Obuna davri tanlanganda ham final_narx ni saqlash
+    $_SESSION['komplektlar_soni'] = 0; // Komplektlar soni tanlanmagan bo'lsa 0
     echo $price;
 }
 

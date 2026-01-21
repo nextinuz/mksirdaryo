@@ -12,12 +12,56 @@ $number_raqam   = sanitize_str($_POST['number_raqam'] ?? '');
 $nashr_turi     = sanitize_str($_POST['nashr_turi'] ?? '');
 $nashr_nomi     = sanitize_str($_POST['nashr_nomi'] ?? '');
 $obuna_davri    = sanitize_str($_POST['obuna_davri'] ?? '');
+// Agar obuna davri tanlanmagan bo'lsa, 12 oyga o'rnatish
+if (empty($obuna_davri) || $obuna_davri === '') {
+    $obuna_davri = '12';
+    $_POST['obuna_davri'] = '12';
+}
 $btn            = $_POST['btn'] ?? null;
 
 // Sessiondagi vaqtinchalik qiymatlar
 $komplektlar_soni = $_SESSION['komplektlar_soni'] ?? 0;
 $final_narx        = $_SESSION['final_narx'] ?? 0;
 $nashr_index       = $_SESSION['nashr_index'] ?? '';
+
+// Agar final_narx 0 bo'lsa yoki mavjud bo'lmasa, obuna davri narxini hisoblash
+if ($final_narx == 0 || empty($final_narx)) {
+    $nashr_turi_session = $_SESSION['nashr_turi'] ?? '';
+    $nashr_nomi_session = $_SESSION['nashr_nomi'] ?? '';
+    
+    // Jadval nomini xavfsiz tekshirish
+    $allowed_tables = ['gazeta', 'jurnal'];
+    $nashr_turi = in_array($nashr_turi_session, $allowed_tables, true) ? $nashr_turi_session : '';
+    
+    if (!empty($nashr_turi) && !empty($nashr_nomi_session)) {
+        // Nashr nomini tozalash
+        $nashr_nomi_clean = str_replace('_', ' ', $nashr_nomi_session);
+        
+        // Obuna davri narxini bazadan olish
+        $stmt = $db->prepare("SELECT butun FROM {$nashr_turi} WHERE nomi = ?");
+        $stmt->bind_param('s', $nashr_nomi_clean);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($row = $result->fetch_assoc()) {
+            $basePrice = (float)$row['butun'];
+            // Obuna davri bo'yicha narxni hisoblash
+            if ($obuna_davri === "6") {
+                $final_narx = round($basePrice / 2);
+            } else {
+                $final_narx = $basePrice;
+            }
+            
+            // Komplektlar soni bo'yicha ko'paytirish
+            if ($komplektlar_soni > 0) {
+                $final_narx = $final_narx * $komplektlar_soni;
+            }
+            
+            $_SESSION['final_narx'] = $final_narx;
+        }
+        $stmt->close();
+    }
+}
 
 ?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -248,8 +292,8 @@ body { margin-left: 0.26in; margin-right: 0.19in; margin-top: 0.21in; margin-bot
             <td class="column11 style22 null"></td>
             <td class="column12 style22 null"></td>
             <!-- <td class="column13">&nbsp;</td> -->
-            <? } ?>
-            <? if ($_POST['obuna_davri'] == "12") { ?>
+            <? } else { ?>
+            <!-- Agar obuna davri 12 oy yoki tanlanmagan bo'lsa, 12 oy uchun to'ldirish -->
             <td class="column0 style16 null"><? echo date('d.m.Y'); ?></td>
             <td class="column1 style21 null">x</td>
             <td class="column2 style22 null">x</td>
@@ -368,8 +412,8 @@ body { margin-left: 0.26in; margin-right: 0.19in; margin-top: 0.21in; margin-bot
             <td class="column11 style22 null"></td>
             <td class="column12 style22 null"></td>
             <!-- <td class="column13">&nbsp;</td> -->
-            <? } ?>
-            <? if ($_POST['obuna_davri'] == "12") { ?>
+            <? } else { ?>
+            <!-- Agar obuna davri 12 oy yoki tanlanmagan bo'lsa, 12 oy uchun to'ldirish -->
             <td class="column0 style16 null"><? echo date('d.m.Y'); ?></td>
             <td class="column1 style21 null">x</td>
             <td class="column2 style22 null">x</td>
@@ -486,26 +530,89 @@ body { margin-left: 0.26in; margin-right: 0.19in; margin-top: 0.21in; margin-bot
 <?
 // Telegramga buyurtmani yuborish
 if (isset($btn) && TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
-$arr = array(
-    'Hudud: ' => $hudud,
-    'MFY: ' => $mfy,
-    'Manzil: ' => $manzil,
-    'F.I.Sh: ' => $fish,
-    'Toifa: ' => $toifa,
-    'Tashkilot nomi: ' => $tashkilot,
-    'Telefon raqami: ' => $number_raqam,
-    'Nashr turi: ' => $nashr_turi,
-    'Nashr nomi: ' => $nashr_nomi,
-    'Obuna davri (Oy):' => $obuna_davri,
-    'Komplekt soni (Шт): ' => $komplektlar_soni,
-        'Umumiy narxi (Som) :' => $final_narx
-);
-
+    // Barcha ma'lumotlarni to'plash
+    $arr = array();
+    
+    // Asosiy ma'lumotlar
+    if (!empty($fish)) {
+        $arr[] = 'F.I.Sh: ' . $fish;
+    }
+    if (!empty($toifa)) {
+        $arr[] = 'Toifa: ' . $toifa;
+    }
+    if (!empty($number_raqam)) {
+        $arr[] = 'Telefon raqami: ' . $number_raqam;
+    }
+    if (!empty($hudud)) {
+        $arr[] = 'Hudud: ' . $hudud;
+    }
+    if (!empty($mfy)) {
+        $arr[] = 'MFY: ' . $mfy;
+    }
+    if (!empty($manzil)) {
+        $arr[] = 'Manzil: ' . $manzil;
+    }
+    // Tashkilot nomi - agar mavjud bo'lsa, ko'rsatiladi
+    // Toifa "Yuridik shahs" bo'lsa, tashkilot nomi ko'rsatiladi
+    // To'g'ridan-to'g'ri POST dan olish (sanitize_str() ba'zida bo'sh qilishi mumkin)
+    $tashkilot_raw = $_POST['tashkilot'] ?? '';
+    $tashkilot_clean = trim($tashkilot_raw);
+    if (!empty($tashkilot_clean)) {
+        $arr[] = 'Tashkilot nomi: ' . $tashkilot_clean;
+    }
+    
+    // Nashr ma'lumotlari
+    if (!empty($nashr_turi)) {
+        $arr[] = 'Nashr turi: ' . $nashr_turi;
+    }
+    if (!empty($nashr_nomi)) {
+        $arr[] = 'Nashr nomi: ' . str_replace('_', ' ', $nashr_nomi);
+    }
+    if (!empty($nashr_index)) {
+        $arr[] = 'Indeks raqami: ' . $nashr_index;
+    }
+    
+    // Obuna ma'lumotlari
+    if (!empty($obuna_davri)) {
+        $arr[] = 'Obuna davri (Oy): ' . $obuna_davri;
+    }
+    if (!empty($komplektlar_soni) && $komplektlar_soni > 0) {
+        $arr[] = 'Komplekt soni (Шт): ' . $komplektlar_soni;
+    }
+    if (!empty($final_narx) && $final_narx > 0) {
+        $arr[] = 'Umumiy narxi (Som) : ' . number_format($final_narx, 0, '.', '');
+    }
+    
+    // Xabarni yaratish (barcha matnlarni to'g'ri encode qilish)
     $txt = '';
-foreach($arr as $key => $value) {
-  $txt .= "<b>".$key."</b> ".$value."%0A";
-};
-
-    $telegramUrl = "https://api.telegram.org/bot".TELEGRAM_BOT_TOKEN."/sendMessage?chat_id=".TELEGRAM_CHAT_ID."&parse_mode=html&text=".$txt;
-    @fopen($telegramUrl,"r");
+    foreach($arr as $line) {
+        $txt .= $line . "\n";
+    }
+    
+    // Telegram API ga POST so'rov yuborish (yaxshiroq usul)
+    $url = "https://api.telegram.org/bot" . TELEGRAM_BOT_TOKEN . "/sendMessage";
+    $data = array(
+        'chat_id' => TELEGRAM_CHAT_ID,
+        'text' => $txt,
+        'parse_mode' => 'HTML'
+    );
+    
+    // cURL orqali yuborish (eng ishonchli usul)
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    
+    $result = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+    
+    // Xatolikni tekshirish (agar kerak bo'lsa)
+    if ($result === false || $httpCode !== 200) {
+        error_log("Telegram xabar yuborishda xatolik. HTTP Code: " . $httpCode . ", Error: " . $error);
+    }
 }
